@@ -16,3 +16,17 @@ Built with open-source AI frameworks, SignBridge is:
 🔓 Free & Open-source (runs fully offline for privacy)
 
 Our mission is to empower children with autism and their families by providing a cost-free, intelligent, and customizable communication tool.
+
+Flow Summary (RAG-enabled)
+
+Gesture Capture: Camera → landmarks → Gesture Agent → embedding.
+
+Intent Mapping: Embedding + context → Intent Agent → intent vector.
+
+RAG Retrieval: Query vector → Retriever → VectorStore → top-K relevant favorites/notes.
+
+Generation: LLM Generator produces natural-language suggestion.
+
+Output: Suggestion returned to UI + TTS.
+
+Feedback Loop: Child/caregiver choice → DB & VectorStore update for personalization.
