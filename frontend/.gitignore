@@ -1,0 +1,55 @@
+(# Node modules)
+node_modules/
+
+(# Production build / bundler outputs)
+dist/
+build/
+out/
+
+(# Local env files)
+.env
+.env.*
+
+(# Logs)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+(# Lockfiles (optional to ignore if you commit them in monorepos — adjust as needed)
+# package-lock.json
+# yarn.lock
+
+(# Editor directories and files)
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+(# macOS)
+.DS_Store
+
+(# Thumbnails)
+Thumbs.db
+
+(# Temporary files)
+tmp/
+temp/
+*.swp
+
+(# Build outputs created by some tools)
+.next/
+.parcel-cache/
+.expo/
+
+(# Optional: disable if you track user-specific coverage)
+coverage/
+
+# Virtual environments
+venv/
+.venv/
+
+# Android build folder (if present in project)
+android/
+
