@@ -98,22 +98,22 @@ Gesture Agent, Intent Agent, Generator, UI/TTS orchestrated via FastAPI
 
 2. Activate the virtual environment
 
-    ```bash
     Windows (PowerShell):
+    ```bash
     \venv\Scripts\Activate
     ```
 
-    ```bash
     Windows (cmd):
+    ```bash
     venv\Scripts\activate
     ```
 
-    ```bash
     macOS / Linux:
+    ```bash
     source venv/bin/activate
     ```
 
-✅ When activated, you should see (venv) at the beginning of your terminal prompt
+    ✅ When activated, you should see (venv) at the beginning of your terminal prompt
 
 3. Install dependencies - Make sure you’re inside the virtual environment (you’ll see (venv)), then:
 
