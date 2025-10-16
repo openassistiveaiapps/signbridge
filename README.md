@@ -73,3 +73,67 @@ Clip storage for few-shot personalization
 Agents:
 
 Gesture Agent, Intent Agent, Generator, UI/TTS orchestrated via FastAPI
+
+# frontend
+
+1. Install dependencies
+
+   ```bash
+   npm install
+   ```
+
+2. Start the app
+
+   ```bash
+   npx expo start
+   ```
+
+# backend
+
+1. In your backend project folder - This will create a folder named venv containing an isolated Python environment.
+
+   ```bash
+  python -m venv venv
+   ```
+
+2. Activate the virtual environment
+
+```Windows (PowerShell):
+.\venv\Scripts\Activate
+```
+
+```
+Windows (cmd):
+venv\Scripts\activate
+```
+
+```
+macOS / Linux:
+source venv/bin/activate
+```
+✅ When activated, you should see (venv) at the beginning of your terminal prompt
+
+3. Install dependencies - Make sure you’re inside the virtual environment (you’ll see (venv)), then:
+
+```
+pip install fastapi uvicorn pydantic
+```
+(You can also install any other packages like torch, scikit-learn, etc., if needed.)
+
+4. Run the backend app
+
+```
+uvicorn main:app --reload --port 8000
+```
+
+main → name of your Python file (without .py)
+app → FastAPI instance variable inside that file
+--reload → automatically restarts the server on code changes
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+✅ Now your backend is live and your frontend can call http://localhost:8000/api/gesture.
+
+5. To deactivate the venv
+
+```
+deactivate
+```
