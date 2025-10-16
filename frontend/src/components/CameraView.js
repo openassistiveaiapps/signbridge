@@ -1,152 +1,178 @@
-import { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-backend-webgl";
 import * as handpose from "@tensorflow-models/handpose";
 
 export default function CameraView() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const modelRef = useRef(null);
-  const processingRef = useRef(false); 
-  const captureActiveRef = useRef(true); 
-  const lastPredictionsRef = useRef([]); 
-  const lastGestureRef = useRef("None"); // store last gesture
+  const lastSentTime = useRef(0);
+  const [perHandGestures, setPerHandGestures] = useState([]);
+  const [combinedGesture, setCombinedGesture] = useState("Waiting...");
+  const [timer, setTimer] = useState(30); // 30 second session
 
-  useEffect(() => {
-    let animationId;
-    let stream;
-    let lastApiCallTime = 0;
-    const API_INTERVAL = 500; 
-    const CAPTURE_DURATION = 30000; // 30 seconds
+  const API_URL = "http://localhost:8000/api/gesture";
 
-    const loadModelAndCamera = async () => {
-      modelRef.current = await handpose.load();
-      console.log("✅ Handpose model loaded");
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 320, height: 240 },
-        });
-        videoRef.current.srcObject = stream;
-      } catch (err) {
-        console.error("⚠️ Cannot access camera:", err);
-        return;
-      }
-
-      videoRef.current.onloadedmetadata = () => {
-        const canvas = canvasRef.current;
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-
-        videoRef.current.play();
-        requestAnimationFrame(processFrame);
+  // ---------------- Setup Camera ----------------
+  const setupCamera = async () => {
+    const video = videoRef.current;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480 },
+      audio: false,
+    });
+    video.srcObject = stream;
+    return new Promise((resolve) => {
+      video.onloadedmetadata = () => {
+        video.play();
+        resolve(video);
       };
+    });
+  };
 
-      // Stop detection and API updates after 30 seconds
-      setTimeout(() => {
-        captureActiveRef.current = false;
-        console.log("⏹️ Stopped hand detection and API calls after 30 seconds");
-      }, CAPTURE_DURATION);
-    };
+  // ---------------- Draw Hands ----------------
+  const drawHand = (predictions, ctx, gestures) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.strokeStyle = "#00FF00";
+    ctx.lineWidth = 2;
+    ctx.font = "18px Arial";
 
-    const processFrame = async () => {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
+    predictions.forEach((prediction, index) => {
+      const landmarks = prediction.landmarks;
+      landmarks.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
+        ctx.fill();
+      });
 
-      if (!videoRef.current) {
-        animationId = requestAnimationFrame(processFrame);
+      const [x, y] = landmarks[0];
+      ctx.fillStyle = "red";
+      ctx.fillText(gestures[index] || "NONE", x - 30, y - 20);
+    });
+  };
+
+  // ---------------- Call Backend ----------------
+  const sendGestureToAPI = async (landmarksArr) => {
+    const now = Date.now();
+    if (now - lastSentTime.current < 5000) return; // throttle every 5s
+    lastSentTime.current = now;
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ landmarks: landmarksArr }),
+      });
+      if (!response.ok) {
+        console.error("FastAPI error:", response.statusText);
         return;
       }
+      const data = await response.json();
+      setPerHandGestures(data.per_hand_gestures);
+      setCombinedGesture(data.predicted_gesture);
+    } catch (err) {
+      console.error("Error calling FastAPI:", err);
+    }
+  };
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+  // ---------------- Main Detection Loop ----------------
+  let startTime = null;
+  const detectHands = async (timestamp) => {
+    if (!startTime) startTime = timestamp;
+    const elapsed = Math.floor((timestamp - startTime) / 1000);
+    const remaining = Math.max(30 - elapsed, 0);
+    setTimer(remaining);
 
-      if (captureActiveRef.current && modelRef.current && !processingRef.current) {
-        processingRef.current = true;
+    if (!modelRef.current || !videoRef.current) {
+      if (remaining > 0) requestAnimationFrame(detectHands);
+      return;
+    }
 
-        const predictions = await modelRef.current.estimateHands(
-          videoRef.current,
-          true
-        );
+    const video = videoRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      if (remaining > 0) requestAnimationFrame(detectHands);
+      return;
+    }
 
-        if (predictions.length > 0) {
-          lastPredictionsRef.current = predictions;
+    const predictions = await modelRef.current.estimateHands(video);
+    const ctx = canvasRef.current.getContext("2d");
 
-          predictions.forEach((hand) => {
-            hand.landmarks.forEach(([x, y]) => {
-              ctx.beginPath();
-              ctx.arc(x, y, 5, 0, 2 * Math.PI);
-              ctx.fillStyle = "red";
-              ctx.fill();
-            });
-          });
+    if (predictions.length > 0) {
+      const landmarksArr = predictions.map((p) =>
+        p.landmarks.map((l) => [...l, 0])
+      );
+      drawHand(predictions, ctx, perHandGestures);
+      await sendGestureToAPI(landmarksArr);
+    } else {
+      setPerHandGestures([]);
+      setCombinedGesture("Waiting...");
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
 
-          const now = Date.now();
-          if (now - lastApiCallTime > API_INTERVAL) {
-            lastApiCallTime = now;
+    if (remaining > 0) requestAnimationFrame(detectHands);
+  };
 
-            try {
-              const response = await fetch("http://localhost:8000/detect_gesture", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  landmarks: predictions.map((p) => p.landmarks),
-                }),
-              });
-              const data = await response.json();
-              lastGestureRef.current = data.gesture || lastGestureRef.current;
-              const gestureEl = document.getElementById("gesture-text");
-              if (gestureEl) {
-                if (Array.isArray(data.gesture)) {
-                  gestureEl.textContent = `Gestures: ${data.gesture.join(", ")}`;
-                } else {
-                  gestureEl.textContent = `Gesture: ${data.gesture}`;
-                }
-              }
-            } catch (err) {
-              console.error("⚠️ Backend API error:", err);
-            }
-          }
-        }
-
-        processingRef.current = false;
-      } else {
-        // Draw last landmarks
-        lastPredictionsRef.current.forEach((hand) => {
-          hand.landmarks.forEach(([x, y]) => {
-            ctx.beginPath();
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = "red";
-            ctx.fill();
-          });
-        });
-
-        // Freeze gesture text after capture stops
-        const gestureEl = document.getElementById("gesture-text");
-        if (gestureEl)
-          gestureEl.textContent = `Gesture: ${lastGestureRef.current}`;
+  // ---------------- Init ----------------
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await tf.setBackend("webgl");
+        await tf.ready();
+        modelRef.current = await handpose.load();
+        await setupCamera();
+        requestAnimationFrame(detectHands);
+      } catch (err) {
+        console.error("Initialization error:", err);
       }
-
-      animationId = requestAnimationFrame(processFrame);
     };
-
-    loadModelAndCamera();
-
-    return () => {
-      if (animationId) cancelAnimationFrame(animationId);
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-    };
+    init();
   }, []);
 
+  // ---------------- Render ----------------
   return (
-    <div>
-      <video ref={videoRef} style={{ display: "none" }} />
+    <div style={{ position: "relative", width: "640px", height: "480px" }}>
+      <video
+        ref={videoRef}
+        style={{
+          position: "absolute",
+          width: "640px",
+          height: "480px",
+          transform: "scaleX(-1)",
+        }}
+      />
       <canvas
         ref={canvasRef}
-        style={{ border: "1px solid black", width: 320, height: 240 }}
+        width="640"
+        height="480"
+        style={{
+          position: "absolute",
+          width: "640px",
+          height: "480px",
+          transform: "scaleX(-1)",
+        }}
       />
       <div
-        id="gesture-text"
-        style={{ fontSize: "20px", marginTop: "10px", fontWeight: "bold" }}
-      ></div>
+        style={{
+          position: "absolute",
+          bottom: 10,
+          left: 10,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          color: "white",
+          padding: "5px 10px",
+          borderRadius: "5px",
+          fontSize: "18px",
+        }}
+      >
+        <div>Timer: {timer}s</div>
+        <div>Combined: {combinedGesture}</div>
+        <div>
+          Per Hand:{" "}
+          {perHandGestures.length > 0
+            ? perHandGestures.join(" | ")
+            : "Waiting..."}
+        </div>
+      </div>
     </div>
   );
 }
